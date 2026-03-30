@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Bayut IS – Revenue Dashboard · Live (Apps Script)</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1623;--surface:#1a2236;--surface2:#212d42;--border:#2d3d57;
+  --accent:#3b82f6;--accent2:#6366f1;--green:#22c55e;--amber:#f59e0b;
+  --red:#ef4444;--cyan:#06b6d4;--violet:#a78bfa;
+  --text:#e2e8f0;--muted:#94a3b8;--radius:10px;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:13px;min-height:100vh}
+
+/* ── Loading overlay ── */
+#loading-overlay{position:fixed;inset:0;background:rgba(15,22,35,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:300;gap:14px;transition:opacity .3s}
+#loading-overlay.hidden{opacity:0;pointer-events:none}
+.spinner{width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{color:var(--text);font-size:15px;font-weight:600}
+.loading-sub{color:var(--muted);font-size:12px;opacity:.8}
+
+/* ── Setup Banner ── */
+#setup-banner{background:linear-gradient(135deg,#1a2e50,#161f35);border-bottom:2px solid var(--accent)}
+.setup-inner{max-width:1600px;margin:0 auto;padding:16px 28px}
+.setup-toggle{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:var(--accent);cursor:pointer;user-select:none;margin-bottom:14px}
+.setup-toggle .arr{font-size:11px;transition:transform .2s}
+.setup-toggle.closed .arr{transform:rotate(-90deg)}
+.setup-body{display:grid;grid-template-columns:1.1fr 1.2fr;gap:24px;padding-bottom:4px}
+.steps{display:flex;flex-direction:column;gap:8px}
+.step{display:flex;gap:10px}
+.sn{background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px}
+.sn.gs{background:var(--green)}
+.st{font-size:12px;color:var(--muted);line-height:1.55}
+.st strong{color:var(--text)}
+.st code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;font-size:10.5px;font-family:monospace;color:var(--cyan)}
+.url-panel{display:flex;flex-direction:column;gap:10px}
+.url-panel label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.url-row{display:flex;gap:8px}
+#apps-url{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 14px;border-radius:7px;font-size:12px;font-family:monospace}
+#apps-url:focus{outline:none;border-color:var(--accent)}
+#apps-url.ok{border-color:var(--green)}
+#apps-url.err{border-color:var(--red)}
+.btn-connect{background:var(--accent);color:#fff;border:none;padding:9px 22px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;transition:background .15s}
+.btn-connect:hover{background:#2563eb}
+.btn-connect:disabled{opacity:.5;cursor:default}
+#url-status{font-size:12px;min-height:18px}
+.hint{font-size:11px;color:var(--muted);line-height:1.6}
+.script-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:monospace;font-size:10.5px;color:#7dd3fc;line-height:1.7;position:relative;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto}
+.copy-btn{position:absolute;top:8px;right:8px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:10px;transition:all .15s}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.info-strip{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:6px;padding:8px 12px;font-size:11px;color:var(--amber);display:flex;gap:8px;align-items:flex-start;line-height:1.5}
+
+/* ── Header ── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{width:38px;height:38px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff}
+header h1{font-size:17px}
+.subtitle{font-size:11px;color:var(--muted);margin-top:2px}
+.hdr-right{display:flex;align-items:center;gap:12px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.status-dot.live{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
+.status-dot.err{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.refresh-badge{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);padding:5px 12px;border-radius:20px;font-size:12px}
+.countdown{font-weight:700;color:var(--accent);min-width:22px;text-align:center}
+.btn-manual{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;padding:0 2px;transition:color .15s}
+.btn-manual:hover{color:var(--accent)}
+.lu{font-size:11px;color:var(--muted)}
+
+/* ── Error bar ── */
+#err-bar{display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 16px;margin:14px 28px 0;font-size:13px;color:var(--red);align-items:center;gap:8px}
+#err-bar.show{display:flex}
+
+/* ── Main ── */
+main{padding:20px 28px;max-width:1600px;margin:0 auto}
+section{margin-bottom:28px}
+.sec-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;display:flex;align-items:center;gap:8px;font-weight:700}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* filters */
+.filters{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fg label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-size:13px;cursor:pointer;min-width:180px}
+select:focus{outline:none;border-color:var(--accent)}
+.btn-rst{background:transparent;border:1px solid var(--border);color:var(--muted);padding:7px 16px;border-radius:6px;cursor:pointer;font-size:12px;transition:all .15s}
+.btn-rst:hover{border-color:var(--accent);color:var(--accent)}
+
+/* KPI cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.kc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden}
+.kc::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.kc.blue::before{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.kc.green::before{background:var(--green)}
+.kc.amber::before{background:var(--amber)}
+.kc.violet::before{background:linear-gradient(90deg,var(--violet),var(--accent2))}
+.ki{font-size:20px;margin-bottom:8px}
+.kl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:4px}
+.km{font-size:24px;font-weight:700;letter-spacing:-.5px}
+.ks{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.kr{display:flex;justify-content:space-between;align-items:center}
+.krl{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.krv{font-size:12px;font-weight:600}
+.div{border:none;border-top:1px solid var(--border);margin:12px 0}
+.pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;vertical-align:middle}
+.pg{background:rgba(34,197,94,.15);color:var(--green)}
+.pb{background:rgba(59,130,246,.15);color:var(--accent)}
+.pa{background:rgba(245,158,11,.15);color:var(--amber)}
+.pc{background:rgba(6,182,212,.15);color:var(--cyan)}
+.pv{background:rgba(167,139,250,.15);color:var(--violet)}
+
+/* tables */
+.tw{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.th{padding:13px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tt{font-size:14px;font-weight:600}
+.thint{font-size:11px;color:var(--muted)}
+table{width:100%;border-collapse:collapse}
+th{background:var(--surface2);text-align:left;padding:10px 14px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;font-weight:600}
+td{padding:9px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr:hover:not(.tot){background:rgba(59,130,246,.04)}
+.nr{text-align:right}
+.rd{background:rgba(99,102,241,.07);cursor:pointer;user-select:none}
+.rd:hover{background:rgba(99,102,241,.14)!important}
+.rd td{font-weight:600}
+.rm{background:rgba(59,130,246,.04);cursor:pointer;user-select:none}
+.rm:hover{background:rgba(59,130,246,.1)!important}
+.rm td:first-child{padding-left:34px}
+.rl td:first-child{padding-left:62px}
+.togbtn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;margin-right:6px;transition:transform .18s;display:inline-block;width:14px}
+.togbtn.open{transform:rotate(90deg);color:var(--accent)}
+.barcell{position:relative;min-width:140px}
+.barbg{position:absolute;left:0;top:2px;bottom:2px;background:rgba(59,130,246,.1);border-radius:0 3px 3px 0}
+.bartxt{position:relative;z-index:1}
+.tot td{font-weight:700!important;background:var(--surface2)!important;border-top:1px solid var(--accent)!important;color:var(--accent)!important}
+.stbl{max-height:500px;overflow-y:auto}
+.stbl::-webkit-scrollbar{width:5px}
+.stbl::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.stbl table thead{position:sticky;top:0;z-index:5}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+input[type=search]{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px;width:230px}
+input[type=search]:focus{outline:none;border-color:var(--accent)}
+.neg{color:var(--red)}
+@media(max-width:1100px){.two{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}.setup-body{grid-template-columns:1fr}}
+@media(max-width:700px){main{padding:12px}.kpi-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="lt">Connecting to Google Sheets…</div>
+  <div class="loading-sub" id="ls">Calling Apps Script endpoint…</div>
+</div>
+
+<!-- ── Setup Banner ── -->
+<div id="setup-banner">
+  <div class="setup-inner">
+    <div class="setup-toggle" id="stoggle" onclick="toggleSetup()">
+      ⚙️ &nbsp;Google Apps Script Setup &nbsp;<span class="arr">▼</span>
+    </div>
+    <div id="sbody" class="setup-body">
+
+      <!-- Steps column -->
+      <div class="steps">
+        <div class="step"><div class="sn">1</div><div class="st">Open your Google Sheet → click <strong>Extensions → Apps Script</strong>.</div></div>
+        <div class="step"><div class="sn">2</div><div class="st">Delete any existing code, then <strong>paste the script</strong> from the code box on the right.</div></div>
+        <div class="step"><div class="sn">3</div><div class="st">Click <strong>Save</strong> (💾), then <strong>Deploy → New Deployment</strong>.</div></div>
+        <div class="step"><div class="sn">4</div><div class="st">Set type to <strong>Web app</strong>. Under <em>"Who has access"</em> choose <strong>Anyone</strong>. Click <strong>Deploy</strong> and authorise.</div></div>
+        <div class="step"><div class="sn">5</div><div class="st">Copy the <strong>Web app URL</strong> (ends with <code>/exec</code>) and paste it below. Click <strong>Connect</strong>.</div></div>
+        <div class="step"><div class="sn gs">ℹ</div><div class="st" style="color:#f59e0b;">After any code changes, always do <strong>Deploy → Manage Deployments → ✏️ Edit → New Version → Deploy</strong> to push updates.</div></div>
+      </div>
+
+      <!-- URL + Script column -->
+      <div class="url-panel">
+        <label>Apps Script Web App URL</label>
+        <div class="url-row">
+          <input type="text" id="apps-url" placeholder="https://script.google.com/macros/s/…/exec"/>
+          <button class="btn-connect" id="btnconn" onclick="connectSheet()">Connect</button>
+        </div>
+        <div id="url-status"></div>
+        <div class="info-strip">⚠ Make sure the sheet tab is named exactly <strong style="color:var(--text)">Reported Sales Data</strong> and the header row is row 1 (match column names in the script).</div>
+        <label style="margin-top:4px">Apps Script Code — paste this into your script editor</label>
+        <div style="position:relative">
+          <div class="script-box" id="scriptbox">// ─── Bayut IS Revenue Dashboard — Apps Script ───────────────────────────────
+// Paste into Extensions → Apps Script → Code.gs
+
+function doGet(e) {
+  try {
+    const ss     = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet  = ss.getSheetByName('Reported Sales Data');
+    if (!sheet)  return json({ error: 'Sheet "Reported Sales Data" not found' });
+
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0].map(h => String(h).trim());
+    const rows    = [];
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      // Skip completely blank rows
+      if (row.every(c => c === '' || c === null || c === undefined)) continue;
+      const obj = {};
+      headers.forEach((h, j) => {
+        const v = row[j];
+        // Convert Date objects to ISO string, keep numbers as-is
+        if (v instanceof Date) obj[h] = Utilities.formatDate(v, 'Asia/Riyadh', 'yyyy-MM-dd');
+        else obj[h] = v;
+      });
+      rows.push(obj);
+    }
+    return json({ data: rows, generated: new Date().toISOString() });
+  } catch(err) {
+    return json({ error: err.message });
+  }
+}
+
+function json(payload) {
+  return ContentService
+    .createTextOutput(JSON.stringify(payload))
+    .setMimeType(ContentService.MimeType.JSON);
+}</div>
+          <button class="copy-btn" onclick="copyScript()">Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">B</div>
+    <div>
+      <h1>Bayut IS &ndash; Integrated Services</h1>
+      <div class="subtitle">Revenue Dashboard &middot; KSA Real Estate &middot; Live via Google Apps Script</div>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div>
+      <div class="lu" id="lu">Not yet loaded</div>
+      <div class="lu" id="period" style="margin-top:2px;">—</div>
+    </div>
+    <div class="refresh-badge">
+      <div class="status-dot" id="sdot"></div>
+      <span id="stxt" style="font-size:12px;color:var(--muted)">Waiting</span>
+      <span style="font-size:12px;color:var(--muted)">&middot; Next in</span>
+      <span class="countdown" id="cdwn">—</span>
+      <button class="btn-manual" onclick="manualRefresh()" title="Refresh now">&#x21BB;</button>
+    </div>
+  </div>
+</header>
+
+<div id="err-bar">⚠ <span id="errmsg"></span></div>
+
+<main>
+
+<section>
+  <div class="sec-title">Filters</div>
+  <div class="filters">
+    <div class="fg"><label>Sales Director</label>
+      <select id="fd" onchange="applyFilters()"><option value="">All Directors</option></select></div>
+    <div class="fg"><label>Sales Manager</label>
+      <select id="fm" onchange="applyFilters()"><option value="">All Managers</option></select></div>
+    <div class="fg"><label>Team Lead</label>
+      <select id="ft" onchange="applyFilters()"><option value="">All Team Leads</option></select></div>
+    <button class="btn-rst" onclick="resetFilters()">&#8635; Reset</button>
+  </div>
+</section>
+
+<section>
+  <div class="sec-title">Key Performance Indicators</div>
+  <div class="kpi-grid">
+    <div class="kc blue">
+      <div class="ki">💰</div><div class="kl">Total Revenue</div>
+      <div class="km" id="k-tr">—</div><hr class="div">
+      <div class="ks">
+        <div class="kr"><span class="krl"><span class="pill pg">Cleared</span></span><span class="krv" id="k-rc">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pb">Reported</span>&nbsp;Pend+In Prog</span><span class="krv" id="k-rr">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pa">Claimed</span></span><span class="krv" id="k-rl">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pc">Sales License</span></span><span class="krv" id="k-rs">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pv">Shifts/Adj</span></span><span class="krv" id="k-rsh">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill" style="background:rgba(239,68,68,.15);color:var(--red)">Cancelations</span></span><span class="krv" id="k-rca">—</span></div>
+      </div>
+    </div>
+    <div class="kc amber">
+      <div class="ki">⏳</div><div class="kl">Total Potential Revenue</div>
+      <div class="km" id="k-tp">—</div><hr class="div">
+      <div class="ks">
+        <div class="kr"><span class="krl">MF Component</span><span class="krv" id="k-pm">—</span></div>
+        <div class="kr"><span class="krl">BF Component</span><span class="krv" id="k-pb">—</span></div>
+      </div>
+    </div>
+    <div class="kc green">
+      <div class="ki">🤝</div><div class="kl">Total Brokerage Fee (BF)</div>
+      <div class="km" id="k-tb">—</div><hr class="div">
+      <div class="ks">
+        <div class="kr"><span class="krl"><span class="pill pg">Cleared</span></span><span class="krv" id="k-bc">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pb">Reported</span>&nbsp;Pend+In Prog</span><span class="krv" id="k-br">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pa">Claimed</span></span><span class="krv" id="k-bl">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pc">Sales License</span></span><span class="krv" id="k-bs">—</span></div>
+      </div>
+    </div>
+    <div class="kc violet">
+      <div class="ki">📣</div><div class="kl">Total Marketing Fee (MF)</div>
+      <div class="km" id="k-tm">—</div><hr class="div">
+      <div class="ks">
+        <div class="kr"><span class="krl"><span class="pill pg">Cleared</span></span><span class="krv" id="k-mc">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pb">Reported</span>&nbsp;Pend+In Prog</span><span class="krv" id="k-mr">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pa">Claimed</span></span><span class="krv" id="k-ml">—</span></div>
+        <div class="kr"><span class="krl"><span class="pill pc">Sales License</span></span><span class="krv" id="k-ms">—</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-title">Performance Breakdown</div>
+  <div class="two">
+    <div class="tw">
+      <div class="th"><span class="tt">&#x25A6; Director → Manager → Team Lead</span><span class="thint">Click row to expand</span></div>
+      <div class="stbl"><table><thead><tr><th style="width:55%">Name / Hierarchy</th><th class="nr">Units (PUC)</th><th class="nr">Revenue (SAR)</th></tr></thead><tbody id="dtb"></tbody></table></div>
+    </div>
+    <div class="tw">
+      <div class="th"><span class="tt">🏗️ Project Wise Performance</span><span class="thint">Sorted by revenue</span></div>
+      <div class="stbl"><table><thead><tr><th>Project Name</th><th class="nr">Units (PUC)</th><th class="nr">Revenue (SAR)</th></tr></thead><tbody id="ptb"></tbody></table></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-title">Sales Consultant Detail</div>
+  <div class="tw">
+    <div class="th"><span class="tt">👤 All Consultants</span>
+      <input type="search" id="csrch" placeholder="Search consultant, manager…" oninput="renderCons()"/></div>
+    <div class="stbl"><table>
+      <thead><tr><th>#</th><th>Consultant</th><th>Team Lead</th><th>Manager</th><th>Director</th>
+        <th class="nr">BF / SC (SAR)</th><th class="nr">MF / SC (SAR)</th><th class="nr">Revenue / SC (SAR)</th><th class="nr">Units (PUC)</th>
+      </tr></thead>
+      <tbody id="ctb"></tbody>
+    </table></div>
+  </div>
+</section>
+</main>
+
+<script>
+// ════════════════════════════════════════════════════
+//  COLUMN NAMES  — must match actual Google Sheet headers exactly
+// ════════════════════════════════════════════════════
+const C = {
+  PROJECT : 'Project Name',
+  STATUS  : 'CID-Status',
+  SALE_CAT: 'Sale Type',          // col L — used for shifts/cancelations
+  CONS    : 'Consultant',
+  TL      : 'Team Lead',
+  MGR     : 'Reporting Manager',
+  DIR     : 'AD/ Director',
+  BF      : 'BF/ SC',
+  MF      : 'DF/ SC',
+  REV     : 'Revenue/ SC',
+  PUC     : 'PUC',
+  MONTH   : 'Month',
+};
+
+const REV_SET  = new Set(['Cleared','Pending','In Progress','Claimed','Sales License']);
+const POT_SET  = new Set(['Potential']);
+const SHIFT_CATS = new Set(['Shift+','Shift-','Correction+','Correction-','Adjustment+','Adjustment-']);
+const CANCEL_CAT = 'Cancelation';
+
+// ════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════
+let ROWS=[], appsURL='';
+let refreshTmr=null, cdTmr=null, cdVal=60;
+let aDir='', aMgr='', aTL='';
+const xDir={}, xMgr={};
+let setupOpen=true;
+
+// ════════════════════════════════════════════════════
+//  SETUP PANEL
+// ════════════════════════════════════════════════════
+function toggleSetup(){
+  setupOpen=!setupOpen;
+  document.getElementById('sbody').style.display=setupOpen?'':'none';
+  document.getElementById('stoggle').classList.toggle('closed',!setupOpen);
+}
+
+function setUrlStatus(m,c){const e=document.getElementById('url-status');e.innerHTML=m;e.style.color=c;}
+
+function copyScript(){
+  const txt=document.getElementById('scriptbox').textContent;
+  navigator.clipboard.writeText(txt).then(()=>{
+    const b=document.querySelector('.copy-btn');b.textContent='Copied!';b.style.color='var(--green)';
+    setTimeout(()=>{b.textContent='Copy';b.style.color='';},2000);
+  });
+}
+
+function connectSheet(){
+  const url=document.getElementById('apps-url').value.trim();
+  if(!url){setUrlStatus('Please paste your Apps Script Web App URL.','var(--red)');return;}
+  if(!url.includes('script.google.com')&&!url.includes('/exec')){
+    setUrlStatus('URL should be from script.google.com and end with /exec','var(--amber)');
+    document.getElementById('apps-url').classList.add('err');return;
+  }
+  document.getElementById('apps-url').classList.remove('err','ok');
+  appsURL=url;
+  localStorage.setItem('bayut_apps_url',url);
+  document.getElementById('btnconn').disabled=true;
+  setUrlStatus('Connecting…','var(--cyan)');
+  loadData(true).then(()=>{
+    document.getElementById('btnconn').disabled=false;
+    document.getElementById('apps-url').classList.add('ok');
+    setUrlStatus('✓ Connected successfully','var(--green)');
+    startAutoRefresh();
+    setTimeout(toggleSetup,800);
+  }).catch(()=>{
+    document.getElementById('btnconn').disabled=false;
+    document.getElementById('apps-url').classList.add('err');
+  });
+}
+
+// ════════════════════════════════════════════════════
+//  FETCH DATA FROM APPS SCRIPT
+// ════════════════════════════════════════════════════
+async function loadData(overlay=false){
+  if(!appsURL) return;
+  if(overlay) showLoading(true,'Fetching data…','Calling Apps Script endpoint…');
+  hideErr(); setStatus('load');
+  try {
+    // Apps Script handles CORS natively — no proxy needed
+    const url = appsURL + (appsURL.includes('?')?'&':'?') + '_t='+Date.now();
+    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if(!res.ok) throw new Error('HTTP '+res.status+' from Apps Script');
+    const json = await res.json();
+    if(json.error) throw new Error('Apps Script error: '+json.error);
+    if(!json.data||!json.data.length) throw new Error('No data returned. Check sheet name and header row.');
+    ROWS = json.data;
+    buildFilters();
+    renderAll();
+    setStatus('live'); updateLU(); resetCd();
+  } catch(e){
+    setStatus('err');
+    showErr(e.message + ' — Make sure the deployment is set to "Anyone" and you re-deployed after pasting the script.');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  FILTERS
+// ════════════════════════════════════════════════════
+function buildFilters(){
+  const dirs=[...new Set(ROWS.map(r=>r[C.DIR]).filter(Boolean))].sort();
+  const dSel=document.getElementById('fd'),cur=dSel.value;
+  dSel.innerHTML='<option value="">All Directors</option>';
+  dirs.forEach(d=>{const o=document.createElement('option');o.value=o.textContent=d;if(d===cur)o.selected=true;dSel.appendChild(o);});
+  aDir=dSel.value; cascadeFilters();
+}
+
+function cascadeFilters(){
+  aDir=document.getElementById('fd').value;
+  const mSel=document.getElementById('fm'),curM=mSel.value;
+  const mgrs=[...new Set(ROWS.filter(r=>!aDir||r[C.DIR]===aDir).map(r=>r[C.MGR]).filter(Boolean))].sort();
+  mSel.innerHTML='<option value="">All Managers</option>';
+  mgrs.forEach(m=>{const o=document.createElement('option');o.value=o.textContent=m;if(m===curM)o.selected=true;mSel.appendChild(o);});
+  aMgr=mSel.value;
+  const tSel=document.getElementById('ft'),curT=tSel.value;
+  const tls=[...new Set(ROWS.filter(r=>(!aDir||r[C.DIR]===aDir)&&(!aMgr||r[C.MGR]===aMgr)).map(r=>r[C.TL]).filter(Boolean))].sort();
+  tSel.innerHTML='<option value="">All Team Leads</option>';
+  tls.forEach(t=>{const o=document.createElement('option');o.value=o.textContent=t;if(t===curT)o.selected=true;tSel.appendChild(o);});
+  aTL=tSel.value;
+}
+
+function applyFilters(){cascadeFilters();renderAll();}
+function resetFilters(){['fd','fm','ft'].forEach(id=>document.getElementById(id).value='');aDir=aMgr=aTL='';cascadeFilters();renderAll();}
+
+// ════════════════════════════════════════════════════
+//  DATA HELPERS
+// ════════════════════════════════════════════════════
+function fRows(statSet,catSet){
+  return ROWS.filter(r=>{
+    if(statSet && !statSet.has(String(r[C.STATUS]||'').trim())) return false;
+    if(catSet  && !catSet.has(String(r[C.SALE_CAT]||'').trim())) return false;
+    if(aDir && String(r[C.DIR]||'').trim()!==aDir) return false;
+    if(aMgr && String(r[C.MGR]||'').trim()!==aMgr) return false;
+    if(aTL  && String(r[C.TL ]||'').trim()!==aTL)  return false;
+    return true;
+  });
+}
+const n  = (r,k) => parseFloat(r[k])||0;
+const sm = (rows,k) => rows.reduce((s,r)=>s+n(r,k),0);
+
+// ════════════════════════════════════════════════════
+//  KPIs
+// ════════════════════════════════════════════════════
+function renderKPIs(){
+  const $=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  const st=s=>{const r=fRows(new Set([s]));return{rv:sm(r,C.REV),bf:sm(r,C.BF),mf:sm(r,C.MF)};};
+  const cl=st('Cleared'),pe=st('Pending'),ip=st('In Progress'),ch=st('Claimed'),sl=st('Sales License');
+  const rp={rv:pe.rv+ip.rv,bf:pe.bf+ip.bf,mf:pe.mf+ip.mf};
+  const tot={rv:cl.rv+rp.rv+ch.rv+sl.rv,bf:cl.bf+rp.bf+ch.bf+sl.bf,mf:cl.mf+rp.mf+ch.mf+sl.mf};
+  const pr=fRows(POT_SET), pot={rv:sm(pr,C.REV),bf:sm(pr,C.BF),mf:sm(pr,C.MF)};
+
+  // Shifts & Cancelations (by sale category)
+  const shiftRows=ROWS.filter(r=>SHIFT_CATS.has(String(r[C.SALE_CAT]||'').trim())&&filterMatch(r));
+  const cancelRows=ROWS.filter(r=>String(r[C.SALE_CAT]||'').trim()===CANCEL_CAT&&filterMatch(r));
+  const shiftRev=sm(shiftRows,C.REV), cancelRev=sm(cancelRows,C.REV);
+
+  $('k-tr',fS(tot.rv)); $('k-rc',f(cl.rv)); $('k-rr',f(rp.rv)); $('k-rl',f(ch.rv)); $('k-rs',f(sl.rv));
+  $('k-rsh',fN(shiftRev)); $('k-rca',fN(cancelRev));
+  $('k-tp',fS(pot.rv)); $('k-pm',f(pot.mf)); $('k-pb',f(pot.bf));
+  $('k-tb',fS(tot.bf)); $('k-bc',f(cl.bf)); $('k-br',f(rp.bf)); $('k-bl',f(ch.bf)); $('k-bs',f(sl.bf));
+  $('k-tm',fS(tot.mf)); $('k-mc',f(cl.mf)); $('k-mr',f(rp.mf)); $('k-ml',f(ch.mf)); $('k-ms',f(sl.mf));
+
+  const months=[...new Set(ROWS.map(r=>r[C.MONTH]).filter(Boolean))];
+  if(months.length) document.getElementById('period').textContent='Period: '+months[months.length-1];
+}
+
+function filterMatch(r){
+  if(aDir && String(r[C.DIR]||'').trim()!==aDir) return false;
+  if(aMgr && String(r[C.MGR]||'').trim()!==aMgr) return false;
+  if(aTL  && String(r[C.TL ]||'').trim()!==aTL)  return false;
+  return true;
+}
+
+// ════════════════════════════════════════════════════
+//  DIRECTOR TABLE
+// ════════════════════════════════════════════════════
+function buildTree(){
+  const rv=fRows(REV_SET),t={};
+  rv.forEach(r=>{
+    const d=String(r[C.DIR]||'—').trim(),m=String(r[C.MGR]||'—').trim(),tl=String(r[C.TL]||'—').trim();
+    if(!t[d])t[d]={p:0,rv:0,mg:{}};
+    if(!t[d].mg[m])t[d].mg[m]={p:0,rv:0,tl:{}};
+    if(!t[d].mg[m].tl[tl])t[d].mg[m].tl[tl]={p:0,rv:0};
+    const p=n(r,C.PUC),v=n(r,C.REV);
+    t[d].p+=p;t[d].rv+=v;t[d].mg[m].p+=p;t[d].mg[m].rv+=v;t[d].mg[m].tl[tl].p+=p;t[d].mg[m].tl[tl].rv+=v;
+  });
+  return t;
+}
+
+function renderDir(){
+  const tb=document.getElementById('dtb');tb.innerHTML='';
+  const tree=buildTree();let tP=0,tR=0;
+  Object.entries(tree).sort((a,b)=>b[1].rv-a[1].rv).forEach(([d,dv])=>{
+    tP+=dv.p;tR+=dv.rv;
+    const open=xDir[d];
+    const tr=document.createElement('tr');tr.className='rd';
+    tr.innerHTML=`<td><button class="togbtn${open?' open':''}" onclick="event.stopPropagation();tD('${esc(d)}')">&#x25B6;</button><span style="color:var(--violet)">&#11042;</span> ${d}</td><td class="nr">${fp(dv.p)}</td><td class="nr ${dv.rv<0?'neg':''}">${f(dv.rv)}</td>`;
+    tr.onclick=()=>tD(d);tb.appendChild(tr);
+    if(!open)return;
+    Object.entries(dv.mg).sort((a,b)=>b[1].rv-a[1].rv).forEach(([m,mv])=>{
+      const mo=xMgr[d+'|'+m];
+      const tr2=document.createElement('tr');tr2.className='rm';
+      tr2.innerHTML=`<td><button class="togbtn${mo?' open':''}" onclick="event.stopPropagation();tM('${esc(d)}','${esc(m)}')">&#x25B6;</button><span style="color:var(--cyan)">&#x25C8;</span> ${m}</td><td class="nr">${fp(mv.p)}</td><td class="nr ${mv.rv<0?'neg':''}">${f(mv.rv)}</td>`;
+      tr2.onclick=()=>tM(d,m);tb.appendChild(tr2);
+      if(!mo)return;
+      Object.entries(mv.tl).sort((a,b)=>b[1].rv-a[1].rv).forEach(([tl,tv])=>{
+        const tr3=document.createElement('tr');tr3.className='rl';
+        tr3.innerHTML=`<td><span style="color:var(--accent)">&#x25C7;</span> ${tl}</td><td class="nr">${fp(tv.p)}</td><td class="nr ${tv.rv<0?'neg':''}">${f(tv.rv)}</td>`;
+        tb.appendChild(tr3);
+      });
+    });
+  });
+  const tot=document.createElement('tr');tot.className='tot';
+  tot.innerHTML=`<td>TOTAL</td><td class="nr">${fp(tP)}</td><td class="nr">${f(tR)}</td>`;
+  tb.appendChild(tot);
+}
+
+const esc=s=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+function tD(d){xDir[d]=!xDir[d];renderDir();}
+function tM(d,m){xMgr[d+'|'+m]=!xMgr[d+'|'+m];renderDir();}
+
+// ════════════════════════════════════════════════════
+//  PROJECT TABLE
+// ════════════════════════════════════════════════════
+function renderProj(){
+  const rv=fRows(REV_SET),map={};
+  rv.forEach(r=>{
+    const p=String(r[C.PROJECT]||'Unknown').trim();
+    if(!map[p])map[p]={p:0,rv:0};
+    map[p].p+=n(r,C.PUC);map[p].rv+=n(r,C.REV);
+  });
+  const projs=Object.entries(map).sort((a,b)=>b[1].rv-a[1].rv);
+  const maxR=Math.max(...projs.map(p=>Math.abs(p[1].rv)),1);
+  const tb=document.getElementById('ptb');tb.innerHTML='';
+  let tP=0,tR=0;
+  projs.forEach(([nm,v])=>{
+    tP+=v.p;tR+=v.rv;
+    const pct=((Math.abs(v.rv)/maxR)*100).toFixed(1);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="barcell"><div class="barbg" style="width:${pct}%"></div><span class="bartxt">${nm}</span></td><td class="nr">${fp(v.p)}</td><td class="nr ${v.rv<0?'neg':''}">${f(v.rv)}</td>`;
+    tb.appendChild(tr);
+  });
+  const tot=document.createElement('tr');tot.className='tot';
+  tot.innerHTML=`<td>TOTAL</td><td class="nr">${fp(tP)}</td><td class="nr">${f(tR)}</td>`;
+  tb.appendChild(tot);
+}
+
+// ════════════════════════════════════════════════════
+//  CONSULTANT TABLE
+// ════════════════════════════════════════════════════
+function renderCons(){
+  const q=(document.getElementById('csrch').value||'').toLowerCase();
+  const rv=fRows(REV_SET),map={};
+  rv.forEach(r=>{
+    const key=[String(r[C.CONS]||''),String(r[C.TL]||''),String(r[C.MGR]||''),String(r[C.DIR]||'')].join('|||');
+    if(!map[key])map[key]={c:r[C.CONS]||'—',tl:r[C.TL]||'—',mg:r[C.MGR]||'—',d:r[C.DIR]||'—',bf:0,mf:0,rv:0,p:0};
+    map[key].bf+=n(r,C.BF);map[key].mf+=n(r,C.MF);map[key].rv+=n(r,C.REV);map[key].p+=n(r,C.PUC);
+  });
+  let list=Object.values(map).filter(c=>!q||(c.c+c.mg+c.d+c.tl).toLowerCase().includes(q)).sort((a,b)=>b.rv-a.rv);
+  const tb=document.getElementById('ctb');tb.innerHTML='';
+  let tB=0,tM=0,tR=0,tP=0;
+  list.forEach((c,i)=>{
+    tB+=c.bf;tM+=c.mf;tR+=c.rv;tP+=c.p;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td style="color:var(--muted);width:28px">${i+1}</td><td style="font-weight:500">${c.c}</td><td style="color:var(--muted);font-size:12px">${c.tl}</td><td style="color:var(--muted);font-size:12px">${c.mg}</td><td><span class="pill pb">${c.d}</span></td><td class="nr ${c.bf<0?'neg':''}" style="color:${c.bf<0?'var(--red)':'var(--green)'}">${f(c.bf)}</td><td class="nr ${c.mf<0?'neg':''}" style="color:${c.mf<0?'var(--red)':'var(--violet)'}">${f(c.mf)}</td><td class="nr ${c.rv<0?'neg':''}" style="font-weight:600">${f(c.rv)}</td><td class="nr">${fp(c.p)}</td>`;
+    tb.appendChild(tr);
+  });
+  const tot=document.createElement('tr');tot.className='tot';
+  tot.innerHTML=`<td colspan="5">TOTAL &ndash; ${list.length} Consultants</td><td class="nr">${f(tB)}</td><td class="nr">${f(tM)}</td><td class="nr">${f(tR)}</td><td class="nr">${fp(tP)}</td>`;
+  tb.appendChild(tot);
+}
+
+function renderAll(){renderKPIs();renderDir();renderProj();renderCons();}
+
+// ════════════════════════════════════════════════════
+//  AUTO-REFRESH
+// ════════════════════════════════════════════════════
+function startAutoRefresh(){
+  if(refreshTmr)clearInterval(refreshTmr);
+  refreshTmr=setInterval(()=>loadData(false),60000);
+  resetCd();
+}
+function resetCd(){
+  if(cdTmr)clearInterval(cdTmr);
+  cdVal=60;updCd();
+  cdTmr=setInterval(()=>{cdVal--;if(cdVal<0)cdVal=60;updCd();},1000);
+}
+function updCd(){const e=document.getElementById('cdwn');if(e)e.textContent=cdVal+'s';}
+function manualRefresh(){
+  if(cdTmr)clearInterval(cdTmr);
+  if(refreshTmr)clearInterval(refreshTmr);
+  loadData(false).then(()=>startAutoRefresh());
+}
+
+// ════════════════════════════════════════════════════
+//  UI HELPERS
+// ════════════════════════════════════════════════════
+function setStatus(s){
+  const d=document.getElementById('sdot'),t=document.getElementById('stxt');
+  d.className='status-dot';
+  if(s==='live'){d.classList.add('live');t.textContent='Live';t.style.color='var(--green)';}
+  else if(s==='err'){d.classList.add('err');t.textContent='Error';t.style.color='var(--red)';}
+  else{t.textContent='Loading';t.style.color='var(--muted)';}
+}
+function updateLU(){const e=document.getElementById('lu');if(e)e.textContent='Last updated: '+new Date().toLocaleTimeString();}
+function showLoading(show,msg='',sub=''){const e=document.getElementById('loading-overlay');e.classList.toggle('hidden',!show);if(msg)document.getElementById('lt').textContent=msg;if(sub)document.getElementById('ls').textContent=sub;}
+function showErr(m){const b=document.getElementById('err-bar');b.classList.add('show');document.getElementById('errmsg').textContent=m;}
+function hideErr(){document.getElementById('err-bar').classList.remove('show');}
+
+// ════════════════════════════════════════════════════
+//  FORMATTERS
+// ════════════════════════════════════════════════════
+const f  = v => (v==null||isNaN(v))?'—':'SAR '+Number(v).toLocaleString('en-US',{maximumFractionDigits:0});
+const fS = v => {if(!v||isNaN(v))return'—';const a=Math.abs(v);let s;if(a>=1e6)s='SAR '+(v/1e6).toFixed(2)+'M';else if(a>=1e3)s='SAR '+(v/1e3).toFixed(1)+'K';else s='SAR '+v.toFixed(0);return s;};
+const fp = v => (v==null||isNaN(v))?'—':Number(v).toFixed(2);
+const fN = v => (v==null||isNaN(v))?'—':(v<0?'(':'')+'SAR '+Math.abs(Number(v)).toLocaleString('en-US',{maximumFractionDigits:0})+(v<0?')':'');
+
+// ════════════════════════════════════════════════════
+//  BOOT
+// ════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded',()=>{
+  const saved=localStorage.getItem('bayut_apps_url');
+  if(saved){
+    appsURL=saved;
+    document.getElementById('apps-url').value=saved;
+    loadData(true).then(()=>startAutoRefresh());
+  } else {
+    showLoading(false);
+  }
+});
+</script>
+</body>
+</html>
